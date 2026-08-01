@@ -8,6 +8,7 @@ body {
 }
 .hidden { display: none !important; }
 a { color: #4363d8; }
+.error { color: #e6194b; min-height: 1.2em; }
 .card {
   background: #262a33;
   padding: 16px;

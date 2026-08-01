@@ -35,6 +35,20 @@ high-availability, even with `min_machines_running = 1` in `fly.toml` — this s
 single-instance requirement above. After any fresh `flyctl launch`, check `flyctl machines list`
 and destroy the extra machine (`flyctl machines destroy <id>`) if more than one is running.
 
+## Access control
+
+The whole app sits behind a single shared-password gate (`GateMiddleware` in `backend/auth.py`),
+required before any page, `POST /api/rooms`, or the `/ws/{code}` websocket will respond. It's
+enforced at the ASGI middleware level, not per-route, so any new route is gated by default —
+allowlist a path explicitly in `backend/auth.py` (not via a `/static` prefix, since `StaticFiles`
+mounts the entire `frontend/` tree) if it truly needs to be reachable pre-gate. The gate's
+"unlocked" flag lives in a Starlette `SessionMiddleware` session-only cookie (`max_age=None`,
+cleared when the browser closes) — `SessionMiddleware` must be added *after* `GateMiddleware` via
+`app.add_middleware`, since Starlette wraps middleware in the reverse of call order (last added =
+outermost = runs first), and the gate needs the session already parsed by the time it checks it.
+Requires `SITE_PASSWORD` and `SESSION_SECRET_KEY` env vars (set as Fly secrets in prod; export
+both locally before running uvicorn — there's no committed default).
+
 ## Workflow
 
 Every task gets its own feature branch and pull request — do not commit directly to `main`.

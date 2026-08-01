@@ -16,6 +16,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -c "import backend.main"
+        env:
+          SESSION_SECRET_KEY: sanity-check-only
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

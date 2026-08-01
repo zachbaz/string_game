@@ -27,15 +27,18 @@ More games will be added to the landing page over time.
 
 ## Running it locally
 
-Requires Python 3.10+.
+Requires Python 3.10+. The whole app sits behind a shared-password gate, so two env vars are
+required before it'll start:
 
 ```
 pip install -r requirements.txt
+export SITE_PASSWORD="whatever you want friends to type in"
+export SESSION_SECRET_KEY="any random string"
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-Then open `http://localhost:8000` in a browser to reach the landing page. Open it in multiple
-tabs/devices to simulate multiple players.
+Then open `http://localhost:8000` in a browser — you'll be redirected to enter `SITE_PASSWORD`
+first. Open it in multiple tabs/devices to simulate multiple players.
 
 ## Tech stack
 
