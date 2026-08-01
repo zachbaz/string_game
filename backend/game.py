@@ -21,6 +21,7 @@ STRING_COLORS = [
 class Player:
     id: str
     name: str
+    user_id: Optional[int] = None
     score: int = 0
     connected: bool = True
     ws: Optional[WebSocket] = None
@@ -70,13 +71,15 @@ class Room:
         self.guess_log: list[dict] = []
 
     # -- players --
-    def add_player(self, player_id: str, name: str, ws: WebSocket) -> Player:
+    def add_player(self, player_id: str, name: str, user_id: Optional[int], ws: WebSocket) -> Player:
         if player_id in self.players:
             p = self.players[player_id]
             p.connected = True
             p.ws = ws
+            p.user_id = user_id
+            p.name = name
             return p
-        player = Player(id=player_id, name=name, ws=ws)
+        player = Player(id=player_id, name=name, user_id=user_id, ws=ws)
         self.players[player_id] = player
         self.turn_order.append(player_id)
         return player
