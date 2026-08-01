@@ -1,10 +1,14 @@
-# StringGame
+# Game Night
 
-A real-time multiplayer party game: one player guesses a secret word while everyone else
-each controls a single bendable string on a shared canvas — and that's the *only* way they're
-allowed to communicate.
+A small hub of real-time multiplayer party games. Pick a game from the landing page and play
+with friends over the browser — no accounts, no installs.
 
-## How to play
+## Games
+
+### String Theory
+
+One player guesses a secret word while everyone else each controls a single bendable string
+on a shared canvas — and that's the *only* way they're allowed to communicate.
 
 1. One player creates a room and shares the 4-letter room code with friends.
 2. Everyone joins the room from their own device/browser.
@@ -19,6 +23,8 @@ allowed to communicate.
    round: the guesser scores 10 points, everyone who contributed a string scores 5.
 7. Start another round — the guesser role rotates to the next connected player each time.
 
+More games will be added to the landing page over time.
+
 ## Running it locally
 
 Requires Python 3.10+.
@@ -28,28 +34,34 @@ pip install -r requirements.txt
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-Then open `http://localhost:8000` in a browser. Open it in multiple tabs/devices to simulate
-multiple players.
+Then open `http://localhost:8000` in a browser to reach the landing page. Open it in multiple
+tabs/devices to simulate multiple players.
 
 ## Tech stack
 
-- **Backend:** FastAPI, served over a WebSocket per room (`/ws/{code}`) plus a single REST
-  endpoint (`POST /api/rooms`) for room creation. All game state is held in memory — there's
-  no database, and restarting the server clears all rooms.
-- **Frontend:** Plain HTML/CSS/JS with no build step or framework. The game canvas is drawn
-  with the 2D Canvas API.
+- **Backend:** FastAPI. Each game gets its own routes and, where needed, its own WebSocket
+  (String Theory uses `/ws/{code}` plus a `POST /api/rooms` REST endpoint for room creation).
+  All game state is held in memory — there's no database, and restarting the server clears
+  all rooms.
+- **Frontend:** Plain HTML/CSS/JS with no build step or framework. `common.css` holds shared
+  page chrome; each game has its own directory under `frontend/` for its markup, styling, and
+  client logic.
 
 ## Project structure
 
 ```
 backend/
-  main.py    FastAPI app, HTTP + WebSocket routes
-  game.py    Room/Player/StringPiece state and round logic
-  words.py   Word list used for rounds
+  main.py             FastAPI app, HTTP + WebSocket routes
+  game.py              Room/Player/StringPiece state and round logic (String Theory)
+  words.py             Word list used for String Theory rounds
 frontend/
-  index.html Page layout
-  app.js     WebSocket client, canvas rendering, drag handling
-  style.css  Styling
+  landing.html         Game-selection landing page
+  landing.css          Landing page styling
+  common.css           Shared page chrome (buttons, inputs, cards)
+  string-theory/
+    index.html         Page layout
+    app.js              WebSocket client, canvas rendering, drag handling
+    style.css           Game-specific styling
 ```
 
 See `CLAUDE.md` for a deeper architectural walkthrough of the state-sync model.

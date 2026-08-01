@@ -14,12 +14,17 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 def index():
-    return FileResponse(f"{FRONTEND_DIR}/index.html")
+    return FileResponse(f"{FRONTEND_DIR}/landing.html")
 
 
-@app.get("/room/{code}")
-def room_page(code: str):
-    return FileResponse(f"{FRONTEND_DIR}/index.html")
+@app.get("/games/string-theory")
+def string_theory_page():
+    return FileResponse(f"{FRONTEND_DIR}/string-theory/index.html")
+
+
+@app.get("/games/string-theory/room/{code}")
+def string_theory_room_page(code: str):
+    return FileResponse(f"{FRONTEND_DIR}/string-theory/index.html")
 
 
 @app.post("/api/rooms")
