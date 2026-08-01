@@ -235,16 +235,33 @@ function drawLanes(players) {
 
 const FINISH_X = 92; // left% that counts as "crossing the line"
 
+// Deterministic PRNG (mulberry32) seeded from state.race_seed, which the
+// server broadcasts identically to every client for a given race. Each
+// client animates the race independently client-side, so without a shared
+// seed every screen would roll its own "false favorite" and waypoints and
+// show a visibly different race for the same draw, even though they'd all
+// agree on the winner.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // Each profile is a list of {t, x} waypoints (t: 0..1 fraction of race
 // duration, x: left% position), always starting at {0,0}. Position between
 // waypoints is eased, so a big x jump over a small t gap reads as a burst of
 // speed, and a small x change over a big t gap reads as a stall/slowdown.
-function winnerProfile(target) {
+function winnerProfile(rng, target) {
   return [
     { t: 0, x: 0 },
-    { t: 0.3, x: rand(12, 26) },
-    { t: 0.55, x: rand(24, 38) }, // hangs back mid-race
-    { t: 0.8, x: rand(45, 60) },
+    { t: 0.3, x: rand(rng, 12, 26) },
+    { t: 0.55, x: rand(rng, 24, 38) }, // hangs back mid-race
+    { t: 0.8, x: rand(rng, 45, 60) },
     { t: 1, x: target }, // big closing kick to the line
   ];
 }
@@ -252,37 +269,37 @@ function winnerProfile(target) {
 // The "false favorite": jumps out ahead early, looking like the winner, then
 // stalls hard in the final stretch and gets caught -- so it never crosses
 // the line, on purpose.
-function falseFavoriteProfile(target) {
+function falseFavoriteProfile(rng, target) {
   return [
     { t: 0, x: 0 },
-    { t: 0.25, x: rand(30, 42) },
-    { t: 0.5, x: rand(58, 72) },
+    { t: 0.25, x: rand(rng, 30, 42) },
+    { t: 0.5, x: rand(rng, 58, 72) },
     { t: 0.78, x: Math.min(target * 0.94, target - 2) }, // almost there...
     { t: 1, x: target }, // ...and barely creeps the rest of the way
   ];
 }
 
-function fillerProfile(target) {
-  if (Math.random() < 0.5) {
+function fillerProfile(rng, target) {
+  if (rng() < 0.5) {
     // small mid-race burst
     return [
       { t: 0, x: 0 },
-      { t: 0.4, x: rand(0.15, 0.3) * target },
-      { t: 0.55, x: rand(0.55, 0.7) * target },
+      { t: 0.4, x: rand(rng, 0.15, 0.3) * target },
+      { t: 0.55, x: rand(rng, 0.55, 0.7) * target },
       { t: 1, x: target },
     ];
   }
   // slow starter
   return [
     { t: 0, x: 0 },
-    { t: 0.3, x: rand(0.05, 0.15) * target },
-    { t: 0.65, x: rand(0.35, 0.5) * target },
+    { t: 0.3, x: rand(rng, 0.05, 0.15) * target },
+    { t: 0.65, x: rand(rng, 0.35, 0.5) * target },
     { t: 1, x: target },
   ];
 }
 
-function rand(min, max) {
-  return min + Math.random() * (max - min);
+function rand(rng, min, max) {
+  return min + rng() * (max - min);
 }
 
 function easeInOutQuad(t) {
@@ -301,20 +318,21 @@ function positionAt(waypoints, frac) {
   return waypoints[waypoints.length - 1].x;
 }
 
-function buildRaceProfiles(players, winnerId) {
+function buildRaceProfiles(players, winnerId, seed) {
+  const rng = mulberry32(seed);
   const nonWinners = players.filter((p) => p.id !== winnerId);
   const falseFavoriteId = nonWinners.length
-    ? nonWinners[Math.floor(Math.random() * nonWinners.length)].id
+    ? nonWinners[Math.floor(rng() * nonWinners.length)].id
     : null;
 
   const profiles = {};
   players.forEach((p) => {
     if (p.id === winnerId) {
-      profiles[p.id] = winnerProfile(FINISH_X);
+      profiles[p.id] = winnerProfile(rng, FINISH_X);
     } else if (p.id === falseFavoriteId) {
-      profiles[p.id] = falseFavoriteProfile(rand(70, 88));
+      profiles[p.id] = falseFavoriteProfile(rng, rand(rng, 70, 88));
     } else {
-      profiles[p.id] = fillerProfile(rand(35, 78));
+      profiles[p.id] = fillerProfile(rng, rand(rng, 35, 78));
     }
   });
   return profiles;
@@ -328,7 +346,7 @@ function animateRace(state) {
   animating = true;
   document.getElementById("race-btn").disabled = true;
 
-  const profiles = buildRaceProfiles(state.players, state.last_winner_id);
+  const profiles = buildRaceProfiles(state.players, state.last_winner_id, state.race_seed || 0);
   const racerEls = {};
   state.players.forEach((p) => {
     const el = document.querySelector(`.lane[data-player-id="${p.id}"] .racer`);
