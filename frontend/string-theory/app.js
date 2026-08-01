@@ -13,25 +13,30 @@ function api(path, opts) {
   return fetch(path, opts).then(r => r.json());
 }
 
+(async () => {
+  const me = await api("/api/me");
+  if (!me.logged_in) {
+    location.href = "/login?next=" + encodeURIComponent(location.pathname);
+  }
+})();
+
 document.getElementById("create-room-btn").onclick = async () => {
   const { code } = await api("/api/rooms", { method: "POST" });
-  const name = prompt("Your name?", "Player") || "Player";
-  joinRoom(code, name);
+  joinRoom(code);
 };
 
 document.getElementById("join-room-btn").onclick = () => {
   const code = document.getElementById("join-code-input").value.trim().toUpperCase();
-  const name = document.getElementById("join-name-input").value.trim() || "Player";
   if (code.length !== 4) { alert("Enter a 4-letter room code"); return; }
-  joinRoom(code, name);
+  joinRoom(code);
 };
 
-function joinRoom(code, name) {
+function joinRoom(code) {
   roomCode = code;
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/${code}`);
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "join", player_id: playerId, name }));
+    ws.send(JSON.stringify({ type: "join", player_id: playerId }));
   };
   ws.onmessage = (evt) => {
     const msg = JSON.parse(evt.data);

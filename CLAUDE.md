@@ -8,8 +8,10 @@ Game Night is a small hub of real-time multiplayer party games, reached through 
 at `/` where players pick a game to play. The only game so far is **String Theory**: one player
 (the "guesser") must guess a secret word while the other connected players each control one
 bendable string (a quadratic curve on a shared canvas) and can only communicate by shaping their
-string. There is no build step, no database, and no test suite — it's a single FastAPI backend
-serving a static vanilla-JS/HTML/CSS frontend, with all game state held in memory.
+string. There is no build step and no test suite — it's a single FastAPI backend serving a
+static vanilla-JS/HTML/CSS frontend. Game state (rooms, in-progress rounds) lives entirely in
+memory and is lost on restart; only accounts and lifetime leaderboard scores are persisted, in a
+SQLite file on a Fly Volume.
 
 ## Running it
 
@@ -35,6 +37,12 @@ high-availability, even with `min_machines_running = 1` in `fly.toml` — this s
 single-instance requirement above. After any fresh `flyctl launch`, check `flyctl machines list`
 and destroy the extra machine (`flyctl machines destroy <id>`) if more than one is running.
 
+The SQLite database (accounts + scores) lives on a Fly Volume (`stringgame_data`, mounted at
+`/data`, see `[mounts]` in `fly.toml`) — a volume is pinned to one physical host and does **not**
+follow the app automatically. If the machine is ever destroyed and recreated, you must pass the
+existing volume ID (`--volume <vol_id>:/data`) or you'll silently get a fresh empty volume and
+lose every account and score.
+
 ## Access control
 
 The whole app sits behind a single shared-password gate (`GateMiddleware` in `backend/auth.py`),
@@ -48,6 +56,13 @@ cleared when the browser closes) — `SessionMiddleware` must be added *after* `
 outermost = runs first), and the gate needs the session already parsed by the time it checks it.
 Requires `SITE_PASSWORD` and `SESSION_SECRET_KEY` env vars (set as Fly secrets in prod; export
 both locally before running uvicorn — there's no committed default).
+
+Separately, playing String Theory (joining a room over `/ws/{code}`) requires a per-user account
+login (`session["user_id"]`/`session["username"]`, set by `/login` or `/signup` in `main.py`) —
+the landing page's leaderboard is viewable gate-only, but `ws_endpoint` rejects a `join` without
+a logged-in `user_id`. Both the gate's "unlocked" flag and the login both live in the same
+session-only cookie (one shared lifetime, not two independently-configurable ones) — logging in
+lasts only as long as the gate does, i.e. until the browser closes.
 
 ## Workflow
 
@@ -69,6 +84,14 @@ rather than pushing straight to `main`.
   `Room.round_state_for(viewer_id)` snapshot to every connected socket in the room — state is not
   diffed or delta-encoded.
 - **`backend/words.py`** — the static word list (`WORDS`) drawn from for each String Theory round.
+- **`backend/db.py`** / **`backend/users.py`** — the only persistence in the app. `db.py` opens a
+  fresh SQLite connection per call (no shared long-lived connection) against `DB_PATH`; `users.py`
+  is plain functions over it (`create_user`, `verify_user`, `add_score`, `get_leaderboard`),
+  framework-free like `game.py`. Password hashing (stdlib PBKDF2, not bcrypt/passlib) lives in
+  `backend/auth.py` alongside the site-password gate, since both are "prove identity" concerns.
+  Called from an `async def` context (the websocket handler), these are blocking calls and must
+  go through `asyncio.to_thread(...)` — plain HTTP routes get this for free since FastAPI
+  threadpools sync `def` handlers automatically.
 - **`frontend/landing.html` / `landing.css`** — the game-selection landing page. Each game is one
   card linking to its own route; there's no client-side routing framework involved.
 - **`frontend/common.css`** — shared page chrome (body theme, buttons, inputs, `.card`) used by
@@ -109,4 +132,7 @@ guesser's browser only ever receives what `round_state_for` returns for that gue
 tied to the WebSocket connection. Reconnecting with the same `player_id` (e.g. after a page
 reload) rejoins the same `Player` and restores their `connected` flag rather than creating a new
 player — see `Room.add_player`. `Room.remove_player` on disconnect keeps the `Player` record
-(for score/turn-order continuity) and only flips `connected = False`.
+(for score/turn-order continuity) and only flips `connected = False`. `Player.user_id` is a
+separate thing: it's the logged-in account backing that player, used only so `main.py` can credit
+`users.add_score` on a correct guess — `game.py`'s own scoring (`Room.check_guess`) stays pure
+in-memory and framework-free; it does not know the database exists.

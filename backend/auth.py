@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import os
 import secrets
 from urllib.parse import quote
@@ -6,6 +9,30 @@ from starlette.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 SITE_PASSWORD = os.environ.get("SITE_PASSWORD")
+
+PBKDF2_ITERATIONS = 600_000
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PBKDF2_ITERATIONS)
+    salt_b64 = base64.b64encode(salt).decode()
+    digest_b64 = base64.b64encode(digest).decode()
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt_b64}${digest_b64}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        algorithm, iterations_str, salt_b64, digest_b64 = stored_hash.split("$")
+    except ValueError:
+        return False
+    if algorithm != "pbkdf2_sha256":
+        return False
+    salt = base64.b64decode(salt_b64)
+    expected = base64.b64decode(digest_b64)
+    actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, int(iterations_str))
+    return hmac.compare_digest(actual, expected)
+
 
 GATE_ALLOWED_PATHS = {"/gate"}
 GATE_ALLOWED_STATIC_PATHS = {"/static/common.css"}

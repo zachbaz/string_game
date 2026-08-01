@@ -1,7 +1,8 @@
 # Game Night
 
-A small hub of real-time multiplayer party games. Pick a game from the landing page and play
-with friends over the browser — no accounts, no installs.
+A small hub of real-time multiplayer party games. Sign up, pick a game from the landing page,
+and play with friends over the browser — no installs. The landing page also shows a leaderboard
+of lifetime scores across everyone with an account.
 
 ## Games
 
@@ -38,14 +39,19 @@ python -m uvicorn backend.main:app --reload --port 8000
 ```
 
 Then open `http://localhost:8000` in a browser — you'll be redirected to enter `SITE_PASSWORD`
-first. Open it in multiple tabs/devices to simulate multiple players.
+first, then to sign up/log in before you can join a game. Open it in multiple tabs/devices (or
+sign up multiple accounts) to simulate multiple players.
+
+Accounts and scores are stored in a SQLite file (`DB_PATH`, defaults to `./data/stringgame.db`
+locally — gitignored, created automatically). Unlike room/round state, this persists across
+restarts.
 
 ## Tech stack
 
 - **Backend:** FastAPI. Each game gets its own routes and, where needed, its own WebSocket
   (String Theory uses `/ws/{code}` plus a `POST /api/rooms` REST endpoint for room creation).
-  All game state is held in memory — there's no database, and restarting the server clears
-  all rooms.
+  All room/round state is held in memory and clears on restart. Accounts and lifetime scores
+  are the one thing that's persisted, in a small SQLite database.
 - **Frontend:** Plain HTML/CSS/JS with no build step or framework. `common.css` holds shared
   page chrome; each game has its own directory under `frontend/` for its markup, styling, and
   client logic.
@@ -55,12 +61,20 @@ first. Open it in multiple tabs/devices to simulate multiple players.
 ```
 backend/
   main.py             FastAPI app, HTTP + WebSocket routes
+  auth.py              Site-password gate middleware + password hashing
+  db.py                SQLite connection helper
+  users.py             Account/leaderboard persistence
   game.py              Room/Player/StringPiece state and round logic (String Theory)
   words.py             Word list used for String Theory rounds
 frontend/
-  landing.html         Game-selection landing page
+  landing.html         Game-selection landing page + leaderboard
   landing.css          Landing page styling
+  landing.js           Leaderboard + account-bar fetch/render
   common.css           Shared page chrome (buttons, inputs, cards)
+  gate.html            Shared-password entry page
+  auth/
+    login.html          Log in page
+    signup.html         Sign up page
   string-theory/
     index.html         Page layout
     app.js              WebSocket client, canvas rendering, drag handling
@@ -87,6 +101,15 @@ flyctl deploy
 
 Then add a `FLY_API_TOKEN` secret to the GitHub repo (Settings → Secrets and variables →
 Actions) with the output of `flyctl tokens create deploy`, so CI can deploy on your behalf.
+Also set `SITE_PASSWORD` and `SESSION_SECRET_KEY` (see "Access control" in `CLAUDE.md`), and
+create the volume the SQLite database lives on:
+
+```
+flyctl volumes create stringgame_data --region iad --size 1
+```
+
+(`fly.toml` already points `/data` at this volume — see the note in `CLAUDE.md` about volumes
+being pinned to a single host if the machine is ever destroyed/recreated.)
 
 CI/CD (`.github/workflows/deploy.yml`): every PR runs a quick sanity import check; every push
 to `main` (i.e. every merged PR) redeploys automatically via `flyctl deploy`.

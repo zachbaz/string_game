@@ -9,6 +9,14 @@ body {
 .hidden { display: none !important; }
 a { color: #4363d8; }
 .error { color: #e6194b; min-height: 1.2em; }
+.back-link {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #999;
+  text-decoration: none;
+}
+.back-link:hover { color: #eee; }
 .card {
   background: #262a33;
   padding: 16px;
