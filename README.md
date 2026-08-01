@@ -24,6 +24,17 @@ on a shared canvas — and that's the *only* way they're allowed to communicate.
    round: the guesser scores 10 points, everyone who contributed a string scores 5.
 7. Start another round — the guesser role rotates to the next connected player each time.
 
+### The Great Wheel of Deciding
+
+Everyone who joins a room becomes an equal-size wedge on a spinning wheel.
+
+1. One player creates a room and shares the 4-letter room code with friends.
+2. Everyone joins from their own device/browser — each new player adds a wedge.
+3. When at least 2 players are connected, hit **Spin**. The wheel picks a uniformly random
+   connected player, who scores 10 points.
+4. Spin again whenever — the same room stays open and the same player can win (and score) more
+   than once.
+
 More games will be added to the landing page over time.
 
 ## Running it locally
@@ -48,10 +59,10 @@ restarts.
 
 ## Tech stack
 
-- **Backend:** FastAPI. Each game gets its own routes and, where needed, its own WebSocket
-  (String Theory uses `/ws/{code}` plus a `POST /api/rooms` REST endpoint for room creation).
-  All room/round state is held in memory and clears on restart. Accounts and lifetime scores
-  are the one thing that's persisted, in a small SQLite database.
+- **Backend:** FastAPI. Each game gets its own routes and its own WebSocket (String Theory uses
+  `/ws/{code}` + `POST /api/rooms`; The Great Wheel of Deciding uses `/ws/wheel/{code}` +
+  `POST /api/wheel/rooms`). All room/round state is held in memory and clears on restart.
+  Accounts and lifetime scores are the one thing that's persisted, in a small SQLite database.
 - **Frontend:** Plain HTML/CSS/JS with no build step or framework. `common.css` holds shared
   page chrome; each game has its own directory under `frontend/` for its markup, styling, and
   client logic.
@@ -66,6 +77,7 @@ backend/
   users.py             Account/leaderboard persistence
   game.py              Room/Player/StringPiece state and round logic (String Theory)
   words.py             Word list used for String Theory rounds
+  wheel.py             WheelRoom/WheelPlayer state and spin logic (The Great Wheel of Deciding)
 frontend/
   landing.html         Game-selection landing page + leaderboard
   landing.css          Landing page styling
@@ -78,6 +90,10 @@ frontend/
   string-theory/
     index.html         Page layout
     app.js              WebSocket client, canvas rendering, drag handling
+    style.css           Game-specific styling
+  great-wheel-of-deciding/
+    index.html         Page layout
+    app.js              WebSocket client, wheel drawing + CSS-transform spin animation
     style.css           Game-specific styling
 ```
 

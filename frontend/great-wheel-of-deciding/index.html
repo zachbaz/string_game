@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Great Wheel of Deciding</title>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/great-wheel-of-deciding/style.css">
+</head>
+<body>
+  <div id="lobby-screen" class="screen">
+    <a href="/" class="back-link">← All games</a>
+    <h1>The Great Wheel of Deciding</h1>
+    <p>Everyone's a wedge. Spin it, and whoever it lands on scores 10 points.</p>
+    <div class="card">
+      <button id="create-room-btn">Create Room</button>
+    </div>
+    <div class="card">
+      <input id="join-code-input" placeholder="ROOM CODE" maxlength="4">
+      <button id="join-room-btn">Join Room</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="screen hidden">
+    <div id="topbar">
+      <span id="room-code-label"></span>
+      <span id="status-label"></span>
+      <button id="spin-btn">Spin</button>
+    </div>
+    <div id="game-body">
+      <div id="wheel-wrap">
+        <canvas id="wheel-canvas" width="500" height="500"></canvas>
+        <div id="wheel-pointer"></div>
+      </div>
+      <div id="sidebar">
+        <div id="winner-banner"></div>
+        <h3>Players</h3>
+        <ul id="player-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/great-wheel-of-deciding/app.js"></script>
+</body>
+</html>
