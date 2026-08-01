@@ -21,6 +21,15 @@ python -m uvicorn backend.main:app --reload --port 8000
 Then open `http://localhost:8000`. The VS Code launch config at `.claude/launch.json` runs the
 same command. There are no lint or test commands configured in this repo.
 
+## Deployment
+
+Deployed to Fly.io as a single always-on machine (see `Dockerfile`, `fly.toml`, and
+`.github/workflows/deploy.yml`, and the "Deployment" section of `README.md` for setup steps).
+Because `ROOMS` and all `Room` state live in one process's memory, this **must** stay a single
+instance — do not introduce multi-replica autoscaling, `min_machines_running` > 1, or a
+serverless/scale-to-zero deployment target without first moving room state out of process memory
+(e.g. into Redis) and adding sticky WebSocket routing.
+
 ## Workflow
 
 Every task gets its own feature branch and pull request — do not commit directly to `main`.
