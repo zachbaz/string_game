@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Game Night</title>
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+  <h1>Game Night</h1>
+  <p>Enter the password to continue.</p>
+  <p class="error">{error}</p>
+  <form class="card" method="post" action="/gate">
+    <input type="hidden" name="next" value="{next}">
+    <input type="password" name="password" placeholder="Password" autofocus>
+    <button type="submit">Enter</button>
+  </form>
+</body>
+</html>

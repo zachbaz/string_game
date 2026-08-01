@@ -1,15 +1,59 @@
+import html
+import os
 import uuid
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Form, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
+from .auth import GateMiddleware, check_site_password
 from .game import ROOMS, Room, generate_room_code, get_or_create_room
 
 app = FastAPI()
 
 FRONTEND_DIR = "frontend"
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+# Order matters: Starlette wraps middleware in the reverse of add_middleware()
+# call order, so the last one added ends up outermost (runs first). Session
+# must run before Gate so scope["session"] is populated by the time the gate
+# checks it -- add GateMiddleware first, SessionMiddleware second.
+app.add_middleware(GateMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ["SESSION_SECRET_KEY"],
+    max_age=None,  # session cookie: cleared when the browser closes
+)
+
+
+def safe_next_path(path: str) -> str:
+    if path.startswith("/") and not path.startswith("//"):
+        return path
+    return "/"
+
+
+def render_gate_page(next_path: str, error: str = "") -> str:
+    template = open(f"{FRONTEND_DIR}/gate.html").read()
+    return template.replace(
+        "{next}", html.escape(next_path, quote=True)
+    ).replace("{error}", html.escape(error))
+
+
+@app.get("/gate")
+def gate_page(next: str = "/"):
+    return HTMLResponse(render_gate_page(safe_next_path(next)))
+
+
+@app.post("/gate")
+def gate_submit(request: Request, password: str = Form(...), next: str = Form("/")):
+    next_path = safe_next_path(next)
+    if check_site_password(password):
+        request.session["unlocked"] = True
+        return RedirectResponse(url=next_path, status_code=303)
+    return HTMLResponse(
+        render_gate_page(next_path, error="Incorrect password."), status_code=401
+    )
 
 
 @app.get("/")

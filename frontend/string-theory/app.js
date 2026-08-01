@@ -48,7 +48,11 @@ function joinRoom(code, name) {
       alert(msg.message);
     }
   };
-  ws.onclose = () => {
+  ws.onclose = (evt) => {
+    if (evt.code === 4401) {
+      location.href = "/gate?next=" + encodeURIComponent(location.pathname);
+      return;
+    }
     document.getElementById("status-label").textContent = "Disconnected";
   };
 }
