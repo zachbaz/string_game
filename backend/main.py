@@ -10,6 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import users
+from .animal_race import (
+    ANIMAL_IDS,
+    RACE_ROOMS,
+    AnimalRaceRoom,
+    generate_race_code,
+    get_or_create_race_room,
+)
 from .auth import GateMiddleware, check_site_password
 from .db import init_db
 from .game import ROOMS, Room, generate_room_code, get_or_create_room
@@ -202,6 +209,25 @@ def create_wheel_room():
     return JSONResponse({"code": code})
 
 
+@app.get("/games/animal-race")
+def animal_race_page():
+    return FileResponse(f"{FRONTEND_DIR}/animal-race/index.html")
+
+
+@app.get("/games/animal-race/room/{code}")
+def animal_race_room_page(code: str):
+    return FileResponse(f"{FRONTEND_DIR}/animal-race/index.html")
+
+
+@app.post("/api/animal-race/rooms")
+def create_animal_race_room():
+    code = generate_race_code()
+    while code in RACE_ROOMS:
+        code = generate_race_code()
+    get_or_create_race_room(code)
+    return JSONResponse({"code": code})
+
+
 async def broadcast_state(room: Room):
     for player in list(room.players.values()):
         if player.connected and player.ws is not None:
@@ -328,3 +354,65 @@ async def wheel_ws_endpoint(websocket: WebSocket, code: str):
         if player_id:
             room.remove_player(player_id)
             await broadcast_wheel_state(room)
+
+
+async def broadcast_race_state(room: AnimalRaceRoom):
+    state = room.state_dict()
+    for player in list(room.players.values()):
+        if player.connected and player.ws is not None:
+            try:
+                await player.ws.send_json(state)
+            except Exception:
+                pass
+
+
+@app.websocket("/ws/animal-race/{code}")
+async def animal_race_ws_endpoint(websocket: WebSocket, code: str):
+    await websocket.accept()
+    room = get_or_create_race_room(code.upper())
+
+    user_id = websocket.session.get("user_id")
+    username = websocket.session.get("username")
+    if not user_id:
+        await websocket.send_json({"type": "error", "message": "Please log in to play."})
+        await websocket.close()
+        return
+
+    player_id = None
+    try:
+        join_msg = await websocket.receive_json()
+        if join_msg.get("type") != "join":
+            await websocket.close()
+            return
+        player_id = join_msg.get("player_id") or str(uuid.uuid4())
+        room.add_player(player_id, username, user_id, websocket)
+        await websocket.send_json({"type": "joined", "player_id": player_id})
+        await broadcast_race_state(room)
+
+        while True:
+            msg = await websocket.receive_json()
+            mtype = msg.get("type")
+
+            if mtype == "choose_animal":
+                animal = msg.get("animal")
+                if isinstance(animal, str) and animal in ANIMAL_IDS:
+                    room.choose_animal(player_id, animal)
+                    await broadcast_race_state(room)
+
+            elif mtype == "start_race":
+                winner_id = room.start_race()
+                if winner_id is None:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Need at least 2 connected players, or a race is still running.",
+                    })
+                else:
+                    await broadcast_race_state(room)
+                    winner = room.players.get(winner_id)
+                    if winner and winner.user_id:
+                        await asyncio.to_thread(users.add_score, winner.user_id, 10)
+
+    except WebSocketDisconnect:
+        if player_id:
+            room.remove_player(player_id)
+            await broadcast_race_state(room)

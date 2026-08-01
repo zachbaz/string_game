@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Animal Race</title>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/animal-race/style.css">
+</head>
+<body>
+  <div id="lobby-screen" class="screen">
+    <a href="/" class="back-link">← All games</a>
+    <h1>Animal Race</h1>
+    <p>Pick your animal. A random racer wins every heat.</p>
+    <div class="card">
+      <button id="create-room-btn">Create Room</button>
+    </div>
+    <div class="card">
+      <input id="join-code-input" placeholder="ROOM CODE" maxlength="4">
+      <button id="join-room-btn">Join Room</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="screen hidden">
+    <div id="topbar">
+      <span id="room-code-label"></span>
+      <span id="status-label"></span>
+      <button id="race-btn">Start Race</button>
+    </div>
+
+    <div id="animal-picker"></div>
+
+    <div id="track-wrap">
+      <div id="lanes"></div>
+    </div>
+
+    <div id="winner-banner"></div>
+
+    <div id="sidebar">
+      <h3>Players</h3>
+      <ul id="player-list"></ul>
+    </div>
+  </div>
+
+  <script src="/static/animal-race/app.js"></script>
+</body>
+</html>
