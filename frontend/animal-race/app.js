@@ -66,7 +66,8 @@ let playerId = sessionStorage.getItem("race_player_id") || null;
 let roomCode = null;
 let latestState = null;
 
-let currentLaneOrder = [];
+let currentLaneSignature = [];
+let raceAnimationId = null;
 let animating = false;
 let hasReceivedFirstState = false;
 let lastKnownWinnerId = null;
@@ -156,7 +157,7 @@ function handleState(state) {
     return;
   }
 
-  if (!animating && rosterChanged(state.players)) {
+  if (!animating && laneDataChanged(state.players)) {
     drawLanes(state.players);
   }
 
@@ -166,9 +167,12 @@ function handleState(state) {
   }
 }
 
-function rosterChanged(players) {
-  const ids = players.map((p) => p.id);
-  return ids.length !== currentLaneOrder.length || ids.some((id, i) => id !== currentLaneOrder[i]);
+// Compares id AND chosen animal, not just id order -- a player picking a new
+// animal doesn't change the roster, but the lane still needs to be redrawn
+// with their new icon so choices actually sync to everyone's screen.
+function laneDataChanged(players) {
+  const sig = players.map((p) => `${p.id}:${p.animal}`);
+  return sig.length !== currentLaneSignature.length || sig.some((s, i) => s !== currentLaneSignature[i]);
 }
 
 function renderPlayerList(players) {
@@ -201,7 +205,7 @@ function showWinnerBanner(state) {
 }
 
 function drawLanes(players) {
-  currentLaneOrder = players.map((p) => p.id);
+  currentLaneSignature = players.map((p) => `${p.id}:${p.animal}`);
   const lanes = document.getElementById("lanes");
   lanes.innerHTML = "";
   players.forEach((p, i) => {
@@ -229,34 +233,129 @@ function drawLanes(players) {
   });
 }
 
+const FINISH_X = 92; // left% that counts as "crossing the line"
+
+// Each profile is a list of {t, x} waypoints (t: 0..1 fraction of race
+// duration, x: left% position), always starting at {0,0}. Position between
+// waypoints is eased, so a big x jump over a small t gap reads as a burst of
+// speed, and a small x change over a big t gap reads as a stall/slowdown.
+function winnerProfile(target) {
+  return [
+    { t: 0, x: 0 },
+    { t: 0.3, x: rand(12, 26) },
+    { t: 0.55, x: rand(24, 38) }, // hangs back mid-race
+    { t: 0.8, x: rand(45, 60) },
+    { t: 1, x: target }, // big closing kick to the line
+  ];
+}
+
+// The "false favorite": jumps out ahead early, looking like the winner, then
+// stalls hard in the final stretch and gets caught -- so it never crosses
+// the line, on purpose.
+function falseFavoriteProfile(target) {
+  return [
+    { t: 0, x: 0 },
+    { t: 0.25, x: rand(30, 42) },
+    { t: 0.5, x: rand(58, 72) },
+    { t: 0.78, x: Math.min(target * 0.94, target - 2) }, // almost there...
+    { t: 1, x: target }, // ...and barely creeps the rest of the way
+  ];
+}
+
+function fillerProfile(target) {
+  if (Math.random() < 0.5) {
+    // small mid-race burst
+    return [
+      { t: 0, x: 0 },
+      { t: 0.4, x: rand(0.15, 0.3) * target },
+      { t: 0.55, x: rand(0.55, 0.7) * target },
+      { t: 1, x: target },
+    ];
+  }
+  // slow starter
+  return [
+    { t: 0, x: 0 },
+    { t: 0.3, x: rand(0.05, 0.15) * target },
+    { t: 0.65, x: rand(0.35, 0.5) * target },
+    { t: 1, x: target },
+  ];
+}
+
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function easeInOutQuad(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function positionAt(waypoints, frac) {
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i];
+    const b = waypoints[i + 1];
+    if (frac <= b.t) {
+      const local = b.t === a.t ? 1 : (frac - a.t) / (b.t - a.t);
+      return a.x + (b.x - a.x) * easeInOutQuad(local);
+    }
+  }
+  return waypoints[waypoints.length - 1].x;
+}
+
+function buildRaceProfiles(players, winnerId) {
+  const nonWinners = players.filter((p) => p.id !== winnerId);
+  const falseFavoriteId = nonWinners.length
+    ? nonWinners[Math.floor(Math.random() * nonWinners.length)].id
+    : null;
+
+  const profiles = {};
+  players.forEach((p) => {
+    if (p.id === winnerId) {
+      profiles[p.id] = winnerProfile(FINISH_X);
+    } else if (p.id === falseFavoriteId) {
+      profiles[p.id] = falseFavoriteProfile(rand(70, 88));
+    } else {
+      profiles[p.id] = fillerProfile(rand(35, 78));
+    }
+  });
+  return profiles;
+}
+
 function animateRace(state) {
-  const durationSec = state.race_seconds || 30;
+  const durationMs = (state.race_seconds || 30) * 1000;
   document.getElementById("winner-banner").textContent = "";
 
+  if (raceAnimationId !== null) cancelAnimationFrame(raceAnimationId);
   animating = true;
   document.getElementById("race-btn").disabled = true;
 
+  const profiles = buildRaceProfiles(state.players, state.last_winner_id);
+  const racerEls = {};
   state.players.forEach((p) => {
-    const laneEl = document.querySelector(`.lane[data-player-id="${p.id}"] .racer`);
-    if (!laneEl) return;
-    const isWinner = p.id === state.last_winner_id;
-    const target = isWinner ? 92 : 40 + Math.random() * 45; // losers never reach the finish line
-    const duration = isWinner ? durationSec : durationSec * (0.6 + Math.random() * 0.35);
-
-    laneEl.style.transitionDuration = "0s";
-    laneEl.style.left = "0%";
-    // Force reflow so the reset above is applied before the transitioned move starts.
-    laneEl.offsetHeight;
-    laneEl.style.transitionDuration = duration + "s";
-    laneEl.style.left = target + "%";
+    const el = document.querySelector(`.lane[data-player-id="${p.id}"] .racer`);
+    if (!el) return;
+    el.style.left = "0%";
+    racerEls[p.id] = el;
   });
 
-  setTimeout(() => {
-    animating = false;
-    document.getElementById("race-btn").disabled = false;
-    showWinnerBanner(state);
-    if (latestState && rosterChanged(latestState.players)) {
-      drawLanes(latestState.players);
+  const startTime = performance.now();
+  const tick = (now) => {
+    const frac = Math.min((now - startTime) / durationMs, 1);
+    state.players.forEach((p) => {
+      const el = racerEls[p.id];
+      if (!el) return;
+      el.style.left = positionAt(profiles[p.id], frac) + "%";
+    });
+    if (frac < 1) {
+      raceAnimationId = requestAnimationFrame(tick);
+    } else {
+      raceAnimationId = null;
+      animating = false;
+      document.getElementById("race-btn").disabled = false;
+      showWinnerBanner(state);
+      if (latestState && laneDataChanged(latestState.players)) {
+        drawLanes(latestState.players);
+      }
     }
-  }, durationSec * 1000);
+  };
+  raceAnimationId = requestAnimationFrame(tick);
 }
