@@ -20,6 +20,12 @@ python -m uvicorn backend.main:app --reload --port 8000
 Then open `http://localhost:8000`. The VS Code launch config at `.claude/launch.json` runs the
 same command. There are no lint or test commands configured in this repo.
 
+## Workflow
+
+Every task gets its own feature branch and pull request — do not commit directly to `main`.
+Branch off `main`, make the change, push the branch, and open a PR (e.g. via `gh pr create`)
+rather than pushing straight to `main`.
+
 ## Architecture
 
 - **`backend/game.py`** — all game/state logic, with zero framework dependencies. `Room` is the
