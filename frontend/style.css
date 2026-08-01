@@ -1,0 +1,83 @@
+* { box-sizing: border-box; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #1b1d23;
+  color: #eee;
+  margin: 0;
+  padding: 20px;
+}
+.hidden { display: none !important; }
+.card {
+  background: #262a33;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 400px;
+}
+input {
+  background: #14161b;
+  border: 1px solid #3a3f4b;
+  color: #eee;
+  padding: 8px;
+  border-radius: 4px;
+}
+button {
+  background: #4363d8;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover { background: #3452c0; }
+
+#topbar {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+#word-banner {
+  font-size: 22px;
+  font-weight: bold;
+  min-height: 30px;
+  color: #f58231;
+}
+#game-body {
+  display: flex;
+  gap: 16px;
+}
+#canvas {
+  background: white;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+#sidebar {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#player-list {
+  list-style: none;
+  padding: 0;
+}
+#player-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid #333;
+}
+.hint {
+  font-size: 12px;
+  color: #999;
+}
+#guess-log {
+  font-size: 13px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.you-marker { color: #46f0f0; font-weight: bold; }
+.guesser-marker { color: #f58231; }

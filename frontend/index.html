@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>StringGame</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="lobby-screen" class="screen">
+    <h1>StringGame</h1>
+    <p>Draw as a team — but everyone is just one bendable string.</p>
+    <div class="card">
+      <button id="create-room-btn">Create Room</button>
+    </div>
+    <div class="card">
+      <input id="join-code-input" placeholder="ROOM CODE" maxlength="4">
+      <input id="join-name-input" placeholder="Your name" maxlength="20">
+      <button id="join-room-btn">Join Room</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="screen hidden">
+    <div id="topbar">
+      <span id="room-code-label"></span>
+      <span id="status-label"></span>
+      <span id="timer-label"></span>
+      <button id="start-round-btn" class="hidden">Start Round</button>
+    </div>
+    <div id="game-body">
+      <canvas id="canvas" width="800" height="600"></canvas>
+      <div id="sidebar">
+        <div id="word-banner"></div>
+        <div id="controls" class="hidden">
+          <label>Thickness <input id="thickness-slider" type="range" min="1" max="40" value="6"></label>
+          <p class="hint">Drag the two endpoints to move/lengthen your string. Drag the middle handle to bend it.</p>
+        </div>
+        <div id="guess-area" class="hidden">
+          <input id="guess-input" placeholder="Type your guess...">
+          <button id="guess-btn">Guess</button>
+        </div>
+        <div id="guess-log"></div>
+        <h3>Players</h3>
+        <ul id="player-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
