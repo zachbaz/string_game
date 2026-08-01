@@ -23,12 +23,17 @@ same command. There are no lint or test commands configured in this repo.
 
 ## Deployment
 
-Deployed to Fly.io as a single always-on machine (see `Dockerfile`, `fly.toml`, and
-`.github/workflows/deploy.yml`, and the "Deployment" section of `README.md` for setup steps).
-Because `ROOMS` and all `Room` state live in one process's memory, this **must** stay a single
-instance — do not introduce multi-replica autoscaling, `min_machines_running` > 1, or a
-serverless/scale-to-zero deployment target without first moving room state out of process memory
-(e.g. into Redis) and adding sticky WebSocket routing.
+Live at https://string-theory-game.fly.dev/. Deployed to Fly.io as a single always-on machine
+(see `Dockerfile`, `fly.toml`, and `.github/workflows/deploy.yml`, and the "Deployment" section
+of `README.md` for setup steps). Because `ROOMS` and all `Room` state live in one process's
+memory, this **must** stay a single instance — do not introduce multi-replica autoscaling,
+`min_machines_running` > 1, or a serverless/scale-to-zero deployment target without first moving
+room state out of process memory (e.g. into Redis) and adding sticky WebSocket routing.
+
+`flyctl launch`/`flyctl deploy` create a second machine by default for zero-downtime
+high-availability, even with `min_machines_running = 1` in `fly.toml` — this silently breaks the
+single-instance requirement above. After any fresh `flyctl launch`, check `flyctl machines list`
+and destroy the extra machine (`flyctl machines destroy <id>`) if more than one is running.
 
 ## Workflow
 
