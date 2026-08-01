@@ -37,6 +37,11 @@ class AnimalRaceRoom:
         # the suspense is pure client-side animation, so there's no "racing" state.
         self.last_winner_id: Optional[str] = None
         self.race_locked_until: float = 0.0
+        # Broadcast so every client can derive the same pseudo-random pacing
+        # (waypoints, "false favorite" pick) for a given race -- each client
+        # animates independently, so without a shared seed every screen would
+        # show a different-looking race for the same draw.
+        self.race_seed: int = 0
 
     # -- players --
     def add_player(self, player_id: str, name: str, user_id: Optional[int], ws: WebSocket) -> RacePlayer:
@@ -89,6 +94,7 @@ class AnimalRaceRoom:
         self.last_winner_id = winner_id
         self.state = "result"
         self.race_locked_until = time.time() + RACE_SECONDS
+        self.race_seed = random.randint(0, 2**31 - 1)
         return winner_id
 
     def state_dict(self) -> dict:
@@ -99,6 +105,7 @@ class AnimalRaceRoom:
             "room_state": self.state,
             "last_winner_id": self.last_winner_id,
             "race_seconds": RACE_SECONDS,
+            "race_seed": self.race_seed,
             "players": [
                 {
                     "id": pid,
