@@ -54,6 +54,43 @@ const ANIMALS = [
       <path d="M18,38 C4,30 2,48 16,46 Z"/>
       <rect x="28" y="48" width="6" height="11"/><rect x="52" y="48" width="6" height="11"/>`,
   },
+  {
+    id: "unicorn",
+    name: "Unicorn",
+    svg: `<ellipse cx="40" cy="40" rx="24" ry="12"/>
+      <polygon points="56,32 74,12 84,18 64,42"/><circle cx="80" cy="16" r="8"/>
+      <polygon points="78,10 82,1 86,11"/>
+      <path d="M18,40 C4,36 2,50 16,48 Z"/>
+      <rect x="28" y="50" width="6" height="9"/><rect x="52" y="50" width="6" height="9"/>`,
+  },
+  {
+    id: "dragon",
+    name: "Dragon",
+    svg: `<ellipse cx="40" cy="40" rx="24" ry="12"/><circle cx="70" cy="28" r="9"/>
+      <polygon points="30,28 46,4 50,30"/>
+      <polygon points="30,26 34,18 38,27"/><polygon points="40,25 44,16 48,26"/><polygon points="50,25 54,17 58,26"/>
+      <path d="M18,42 C4,44 2,54 14,50 C10,48 12,45 18,42 Z"/>
+      <rect x="30" y="50" width="6" height="9"/><rect x="54" y="50" width="6" height="9"/>`,
+  },
+  {
+    id: "phoenix",
+    name: "Phoenix",
+    svg: `<ellipse cx="48" cy="34" rx="18" ry="11"/><circle cx="70" cy="24" r="8"/>
+      <polygon points="77,24 89,21 78,29"/>
+      <path d="M38,30 C22,10 16,30 32,38 C26,34 32,30 38,30 Z"/>
+      <path d="M28,36 C6,26 2,48 22,46 C15,42 18,38 28,36 Z"/>
+      <rect x="42" y="44" width="4" height="8"/><rect x="56" y="44" width="4" height="8"/>`,
+  },
+  {
+    id: "griffin",
+    name: "Griffin",
+    svg: `<ellipse cx="40" cy="40" rx="24" ry="13"/><circle cx="70" cy="26" r="9"/>
+      <polygon points="78,26 90,23 79,32"/>
+      <polygon points="65,17 68,6 72,18"/>
+      <polygon points="28,28 44,2 50,30"/>
+      <path d="M18,40 C4,34 2,50 16,48 Z"/>
+      <rect x="30" y="50" width="6" height="9"/><rect x="54" y="50" width="6" height="9"/>`,
+  },
 ];
 const ANIMAL_BY_ID = Object.fromEntries(ANIMALS.map((a) => [a.id, a]));
 const LANE_COLORS = [
@@ -318,12 +355,25 @@ function positionAt(waypoints, frac) {
   return waypoints[waypoints.length - 1].x;
 }
 
+const EXPLOSION_CHANCE = 0.4;
+
+// The winner is never a candidate -- it's already server-determined and must
+// visibly reach the finish line, so letting it explode would contradict the
+// result. Drawn from the same shared rng as everything else in this
+// function, so every client picks the same victim at the same moment.
+function decideExplosion(rng, nonWinners) {
+  if (!nonWinners.length || rng() >= EXPLOSION_CHANCE) return null;
+  const victim = nonWinners[Math.floor(rng() * nonWinners.length)];
+  return { playerId: victim.id, t: 0.2 + rng() * 0.45 };
+}
+
 function buildRaceProfiles(players, winnerId, seed) {
   const rng = mulberry32(seed);
   const nonWinners = players.filter((p) => p.id !== winnerId);
   const falseFavoriteId = nonWinners.length
     ? nonWinners[Math.floor(rng() * nonWinners.length)].id
     : null;
+  const explosion = decideExplosion(rng, nonWinners);
 
   const profiles = {};
   players.forEach((p) => {
@@ -335,7 +385,38 @@ function buildRaceProfiles(players, winnerId, seed) {
       profiles[p.id] = fillerProfile(rng, rand(rng, 35, 78));
     }
   });
-  return profiles;
+  return { profiles, explosion };
+}
+
+// Clears explosion fx/classes left over from a previous race so a lane that
+// exploded last time doesn't start the next race already marked exploded.
+function resetLaneForRace(p) {
+  const lane = document.querySelector(`.lane[data-player-id="${p.id}"]`);
+  if (!lane) return;
+  const racer = lane.querySelector(".racer");
+  if (racer) racer.classList.remove("exploded");
+  const fx = lane.querySelector(".explosion-fx");
+  if (fx) fx.remove();
+  const nameEl = lane.querySelector(".lane-name");
+  if (nameEl) nameEl.textContent = p.name + (p.id === playerId ? " (you)" : "");
+}
+
+function triggerExplosion(playerId, atPercent) {
+  const lane = document.querySelector(`.lane[data-player-id="${playerId}"]`);
+  if (!lane) return;
+  const racer = lane.querySelector(".racer");
+  if (racer) racer.classList.add("exploded");
+  const strip = lane.querySelector(".lane-strip");
+  if (strip) {
+    const fx = document.createElement("div");
+    fx.className = "explosion-fx";
+    fx.style.left = atPercent + "%";
+    fx.textContent = "💥";
+    strip.appendChild(fx);
+    setTimeout(() => fx.remove(), 700);
+  }
+  const nameEl = lane.querySelector(".lane-name");
+  if (nameEl) nameEl.textContent += " 💥";
 }
 
 function animateRace(state) {
@@ -346,21 +427,30 @@ function animateRace(state) {
   animating = true;
   document.getElementById("race-btn").disabled = true;
 
-  const profiles = buildRaceProfiles(state.players, state.last_winner_id, state.race_seed || 0);
+  const { profiles, explosion } = buildRaceProfiles(state.players, state.last_winner_id, state.race_seed || 0);
   const racerEls = {};
   state.players.forEach((p) => {
+    resetLaneForRace(p);
     const el = document.querySelector(`.lane[data-player-id="${p.id}"] .racer`);
     if (!el) return;
     el.style.left = "0%";
     racerEls[p.id] = el;
   });
 
+  const exploded = new Set();
   const startTime = performance.now();
   const tick = (now) => {
     const frac = Math.min((now - startTime) / durationMs, 1);
     state.players.forEach((p) => {
       const el = racerEls[p.id];
       if (!el) return;
+      if (explosion && p.id === explosion.playerId && frac >= explosion.t) {
+        if (!exploded.has(p.id)) {
+          exploded.add(p.id);
+          triggerExplosion(p.id, positionAt(profiles[p.id], explosion.t));
+        }
+        return; // frozen at the explosion point for the rest of the race
+      }
       el.style.left = positionAt(profiles[p.id], frac) + "%";
     });
     if (frac < 1) {

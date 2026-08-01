@@ -11,7 +11,10 @@ RACE_SECONDS = 30.0
 # Kept in sync with the animal roster drawn client-side in
 # frontend/animal-race/app.js -- an id here with no matching silhouette
 # there would just render as a blank racer.
-ANIMAL_IDS = ["rabbit", "turtle", "cat", "dog", "fox", "horse"]
+ANIMAL_IDS = [
+    "rabbit", "turtle", "cat", "dog", "fox", "horse",
+    "unicorn", "dragon", "phoenix", "griffin",
+]
 
 
 @dataclass
