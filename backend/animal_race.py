@@ -6,7 +6,8 @@ from typing import Optional
 
 from starlette.websockets import WebSocket
 
-RACE_SECONDS = 30.0
+RACE_SECONDS_MIN = 20.0
+RACE_SECONDS_MAX = 30.0
 
 # Kept in sync with the animal roster drawn client-side in
 # frontend/animal-race/app.js -- an id here with no matching silhouette
@@ -45,6 +46,10 @@ class AnimalRaceRoom:
         # animates independently, so without a shared seed every screen would
         # show a different-looking race for the same draw.
         self.race_seed: int = 0
+        # Randomized per race (20-30s) so races don't always run the same
+        # length; broadcast in state_dict() so the client's animation
+        # duration and the server's re-lock window always agree.
+        self.race_seconds: float = 0.0
 
     # -- players --
     def add_player(self, player_id: str, name: str, user_id: Optional[int], ws: WebSocket) -> RacePlayer:
@@ -96,7 +101,8 @@ class AnimalRaceRoom:
         self.players[winner_id].wins += 1
         self.last_winner_id = winner_id
         self.state = "result"
-        self.race_locked_until = time.time() + RACE_SECONDS
+        self.race_seconds = random.uniform(RACE_SECONDS_MIN, RACE_SECONDS_MAX)
+        self.race_locked_until = time.time() + self.race_seconds
         self.race_seed = random.randint(0, 2**31 - 1)
         return winner_id
 
@@ -107,7 +113,7 @@ class AnimalRaceRoom:
             "type": "state",
             "room_state": self.state,
             "last_winner_id": self.last_winner_id,
-            "race_seconds": RACE_SECONDS,
+            "race_seconds": self.race_seconds,
             "race_seed": self.race_seed,
             "players": [
                 {

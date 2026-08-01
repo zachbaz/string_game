@@ -108,6 +108,7 @@ let raceAnimationId = null;
 let animating = false;
 let hasReceivedFirstState = false;
 let lastKnownWinnerId = null;
+let lastKnownRaceSeed = null;
 
 function api(path, opts) {
   return fetch(path, opts).then((r) => r.json());
@@ -189,6 +190,7 @@ function handleState(state) {
   if (!hasReceivedFirstState) {
     hasReceivedFirstState = true;
     lastKnownWinnerId = state.last_winner_id;
+    lastKnownRaceSeed = state.race_seed;
     drawLanes(state.players);
     if (state.last_winner_id) showWinnerBanner(state);
     return;
@@ -198,8 +200,14 @@ function handleState(state) {
     drawLanes(state.players);
   }
 
-  if (state.last_winner_id && state.last_winner_id !== lastKnownWinnerId) {
+  // Compares race_seed, not last_winner_id: the same player can win twice in
+  // a row (very likely in a 2-player room), and last_winner_id alone
+  // wouldn't change between those races, silently skipping the whole
+  // animation -- race_seed is a fresh random draw every time so it's a
+  // reliable "a new race actually happened" signal.
+  if (state.last_winner_id && state.race_seed !== lastKnownRaceSeed) {
     lastKnownWinnerId = state.last_winner_id;
+    lastKnownRaceSeed = state.race_seed;
     animateRace(state);
   }
 }
@@ -304,15 +312,17 @@ function winnerProfile(rng, target) {
 }
 
 // The "false favorite": jumps out ahead early, looking like the winner, then
-// stalls hard in the final stretch and gets caught -- so it never crosses
-// the line, on purpose.
+// its pace visibly drops off in the back half -- but it keeps creeping the
+// whole time, spread across several waypoints, so it never reads as coming
+// to a dead stop, just fading instead of a real closing kick.
 function falseFavoriteProfile(rng, target) {
   return [
     { t: 0, x: 0 },
-    { t: 0.25, x: rand(rng, 30, 42) },
-    { t: 0.5, x: rand(rng, 58, 72) },
-    { t: 0.78, x: Math.min(target * 0.94, target - 2) }, // almost there...
-    { t: 1, x: target }, // ...and barely creeps the rest of the way
+    { t: 0.22, x: rand(rng, 26, 36) },
+    { t: 0.45, x: rand(rng, 52, 64) },
+    { t: 0.65, x: target * rand(rng, 0.74, 0.84) },
+    { t: 0.85, x: target * rand(rng, 0.89, 0.95) },
+    { t: 1, x: target },
   ];
 }
 
@@ -395,26 +405,19 @@ function resetLaneForRace(p) {
   if (!lane) return;
   const racer = lane.querySelector(".racer");
   if (racer) racer.classList.remove("exploded");
-  const fx = lane.querySelector(".explosion-fx");
-  if (fx) fx.remove();
   const nameEl = lane.querySelector(".lane-name");
   if (nameEl) nameEl.textContent = p.name + (p.id === playerId ? " (you)" : "");
 }
 
-function triggerExplosion(playerId, atPercent) {
+// The exploded marker is a persistent CSS ::after on .racer.exploded (see
+// style.css), not a fade-out fx element -- a half-second pop that vanishes
+// again is too easy to miss entirely; a marker that stays for the rest of
+// the race is unmistakable even if you looked away when it happened.
+function triggerExplosion(playerId) {
   const lane = document.querySelector(`.lane[data-player-id="${playerId}"]`);
   if (!lane) return;
   const racer = lane.querySelector(".racer");
   if (racer) racer.classList.add("exploded");
-  const strip = lane.querySelector(".lane-strip");
-  if (strip) {
-    const fx = document.createElement("div");
-    fx.className = "explosion-fx";
-    fx.style.left = atPercent + "%";
-    fx.textContent = "💥";
-    strip.appendChild(fx);
-    setTimeout(() => fx.remove(), 700);
-  }
   const nameEl = lane.querySelector(".lane-name");
   if (nameEl) nameEl.textContent += " 💥";
 }
@@ -447,7 +450,8 @@ function animateRace(state) {
       if (explosion && p.id === explosion.playerId && frac >= explosion.t) {
         if (!exploded.has(p.id)) {
           exploded.add(p.id);
-          triggerExplosion(p.id, positionAt(profiles[p.id], explosion.t));
+          el.style.left = positionAt(profiles[p.id], explosion.t) + "%";
+          triggerExplosion(p.id);
         }
         return; // frozen at the explosion point for the rest of the race
       }
