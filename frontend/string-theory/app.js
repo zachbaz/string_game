@@ -4,7 +4,7 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 let ws = null;
-let playerId = sessionStorage.getItem("stringgame_player_id") || null;
+let playerId = sessionStorage.getItem("string_theory_player_id") || null;
 let roomCode = null;
 let latestState = null;
 let dragging = null; // {field: 'x1'|'y1'|... paired, handle: 'a'|'b'|'bend'}
@@ -37,7 +37,7 @@ function joinRoom(code, name) {
     const msg = JSON.parse(evt.data);
     if (msg.type === "joined") {
       playerId = msg.player_id;
-      sessionStorage.setItem("stringgame_player_id", playerId);
+      sessionStorage.setItem("string_theory_player_id", playerId);
       lobbyScreen.classList.add("hidden");
       gameScreen.classList.remove("hidden");
       document.getElementById("room-code-label").textContent = "Room: " + roomCode;
