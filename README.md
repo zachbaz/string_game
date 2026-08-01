@@ -66,6 +66,28 @@ frontend/
 
 See `CLAUDE.md` for a deeper architectural walkthrough of the state-sync model.
 
+## Deployment
+
+Hosted on [Fly.io](https://fly.io) as a single always-on machine, built from the `Dockerfile` in
+this repo. This is required, not just convenient: all game state lives in an in-memory `ROOMS`
+dict in one Python process, so the app cannot be split across multiple instances/replicas or
+scaled to zero — rooms would randomly become invisible to players routed to a different
+instance.
+
+One-time setup:
+
+```
+flyctl auth login
+flyctl launch --no-deploy   # reuses fly.toml; pick a different `app` name if the one in fly.toml is taken
+flyctl deploy
+```
+
+Then add a `FLY_API_TOKEN` secret to the GitHub repo (Settings → Secrets and variables →
+Actions) with the output of `flyctl tokens create deploy`, so CI can deploy on your behalf.
+
+CI/CD (`.github/workflows/deploy.yml`): every PR runs a quick sanity import check; every push
+to `main` (i.e. every merged PR) redeploys automatically via `flyctl deploy`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
