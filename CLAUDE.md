@@ -5,13 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Game Night is a small hub of real-time multiplayer party games, reached through a landing page
-at `/` where players pick a game to play. The only game so far is **String Theory**: one player
-(the "guesser") must guess a secret word while the other connected players each control one
-bendable string (a quadratic curve on a shared canvas) and can only communicate by shaping their
-string. There is no build step and no test suite — it's a single FastAPI backend serving a
-static vanilla-JS/HTML/CSS frontend. Game state (rooms, in-progress rounds) lives entirely in
-memory and is lost on restart; only accounts and lifetime leaderboard scores are persisted, in a
-SQLite file on a Fly Volume.
+at `/` where players pick a game to play. There are two games so far:
+
+- **String Theory**: one player (the "guesser") must guess a secret word while the other
+  connected players each control one bendable string (a quadratic curve on a shared canvas) and
+  can only communicate by shaping their string.
+- **The Great Wheel of Deciding**: everyone who joins a room becomes an equal-size wedge on a
+  spinning wheel; spinning picks a uniformly random connected player, who scores 10 points.
+  Repeatably spinnable in the same room.
+
+There is no build step and no test suite — it's a single FastAPI backend serving a static
+vanilla-JS/HTML/CSS frontend. Game state (rooms, in-progress rounds) lives entirely in memory and
+is lost on restart; only accounts and lifetime leaderboard scores are persisted, in a SQLite file
+on a Fly Volume.
 
 ## Running it
 
@@ -84,6 +90,13 @@ rather than pushing straight to `main`.
   `Room.round_state_for(viewer_id)` snapshot to every connected socket in the room — state is not
   diffed or delta-encoded.
 - **`backend/words.py`** — the static word list (`WORDS`) drawn from for each String Theory round.
+- **`backend/wheel.py`** — a second, fully independent instance of the same `game.py` pattern for
+  The Great Wheel of Deciding: `WheelRoom`/`WheelPlayer`, its own `WHEEL_ROOMS` registry, its own
+  4-letter room code generator. No shared state or code with `Room`/`ROOMS` — see "Adding a new
+  game" below. `WheelRoom.spin()` picks the winner synchronously (no `await` inside it) so the
+  draw is atomic with respect to other incoming messages; `main.py`'s `/ws/wheel/{code}` handler
+  calls `broadcast_wheel_state` and then `users.add_score` only after `spin()` has already fully
+  resolved, mirroring the ordering `ws_endpoint`'s `guess` handler uses for String Theory.
 - **`backend/db.py`** / **`backend/users.py`** — the only persistence in the app. `db.py` opens a
   fresh SQLite connection per call (no shared long-lived connection) against `DB_PATH`; `users.py`
   is plain functions over it (`create_user`, `verify_user`, `add_score`, `get_leaderboard`),
@@ -108,7 +121,11 @@ Each game gets its own directory under `frontend/<game-slug>/` for its markup, s
 client JS (pulling in `frontend/common.css` for shared chrome), plus its own route(s) in
 `backend/main.py` and, if it needs live state, its own WebSocket path — don't reuse String
 Theory's `/ws/{code}` or its `Room`/`ROOMS` model for unrelated games. Add a card for it to
-`frontend/landing.html`.
+`frontend/landing.html`. `backend/wheel.py` + `frontend/great-wheel-of-deciding/` is a complete
+worked example of this pattern: its own state module, its own `/ws/wheel/{code}` path and
+`/api/wheel/rooms` endpoint, its own `sessionStorage` key (`wheel_player_id`) — while still
+reusing the shared, app-wide account/session layer (`backend/users.py`, the login check via
+`websocket.session`, `GateMiddleware`) rather than duplicating that.
 
 ### Server-authoritative state model
 
@@ -124,7 +141,11 @@ in `ws_endpoint` in `main.py`, mutate the `Room` in `game.py`, then call `broadc
 guesser never sees `word` while a round is active, and only the viewer's own `StringPiece` drag
 handles are meaningful to draw client-side. Any new field that should be hidden from the guesser
 (or from non-owners) needs to be redacted inside this method, not filtered client-side — the
-guesser's browser only ever receives what `round_state_for` returns for that guesser.
+guesser's browser only ever receives what `round_state_for` returns for that guesser. This is
+specific to games with asymmetric information — The Great Wheel of Deciding has none, so
+`WheelRoom.state_dict()` takes no `viewer_id` and every connected socket gets the identical
+payload; don't add an unused `viewer_id` parameter to a new game's state method just for surface
+consistency if it has nothing to redact.
 
 ### Player identity vs. connection
 

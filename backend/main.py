@@ -14,6 +14,7 @@ from .auth import GateMiddleware, check_site_password
 from .db import init_db
 from .game import ROOMS, Room, generate_room_code, get_or_create_room
 from .users import UsernameTakenError
+from .wheel import WHEEL_ROOMS, WheelRoom, generate_wheel_code, get_or_create_wheel_room
 
 app = FastAPI()
 
@@ -182,6 +183,25 @@ def create_room():
     return JSONResponse({"code": code})
 
 
+@app.get("/games/great-wheel-of-deciding")
+def wheel_page():
+    return FileResponse(f"{FRONTEND_DIR}/great-wheel-of-deciding/index.html")
+
+
+@app.get("/games/great-wheel-of-deciding/room/{code}")
+def wheel_room_page(code: str):
+    return FileResponse(f"{FRONTEND_DIR}/great-wheel-of-deciding/index.html")
+
+
+@app.post("/api/wheel/rooms")
+def create_wheel_room():
+    code = generate_wheel_code()
+    while code in WHEEL_ROOMS:
+        code = generate_wheel_code()
+    get_or_create_wheel_room(code)
+    return JSONResponse({"code": code})
+
+
 async def broadcast_state(room: Room):
     for player in list(room.players.values()):
         if player.connected and player.ws is not None:
@@ -252,3 +272,59 @@ async def ws_endpoint(websocket: WebSocket, code: str):
         if player_id:
             room.remove_player(player_id)
             await broadcast_state(room)
+
+
+async def broadcast_wheel_state(room: WheelRoom):
+    state = room.state_dict()
+    for player in list(room.players.values()):
+        if player.connected and player.ws is not None:
+            try:
+                await player.ws.send_json(state)
+            except Exception:
+                pass
+
+
+@app.websocket("/ws/wheel/{code}")
+async def wheel_ws_endpoint(websocket: WebSocket, code: str):
+    await websocket.accept()
+    room = get_or_create_wheel_room(code.upper())
+
+    user_id = websocket.session.get("user_id")
+    username = websocket.session.get("username")
+    if not user_id:
+        await websocket.send_json({"type": "error", "message": "Please log in to play."})
+        await websocket.close()
+        return
+
+    player_id = None
+    try:
+        join_msg = await websocket.receive_json()
+        if join_msg.get("type") != "join":
+            await websocket.close()
+            return
+        player_id = join_msg.get("player_id") or str(uuid.uuid4())
+        room.add_player(player_id, username, user_id, websocket)
+        await websocket.send_json({"type": "joined", "player_id": player_id})
+        await broadcast_wheel_state(room)
+
+        while True:
+            msg = await websocket.receive_json()
+            mtype = msg.get("type")
+
+            if mtype == "spin":
+                winner_id = room.spin()
+                if winner_id is None:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Need at least 2 connected players, or the wheel is still spinning.",
+                    })
+                else:
+                    await broadcast_wheel_state(room)
+                    winner = room.players.get(winner_id)
+                    if winner and winner.user_id:
+                        await asyncio.to_thread(users.add_score, winner.user_id, 10)
+
+    except WebSocketDisconnect:
+        if player_id:
+            room.remove_player(player_id)
+            await broadcast_wheel_state(room)
